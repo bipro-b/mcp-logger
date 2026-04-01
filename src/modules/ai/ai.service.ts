@@ -22,10 +22,12 @@ export class AIService {
   private readonly MODEL = "gemini-3-flash-preview";
   private readonly ENDPOINT: string;
 
+  
   constructor() {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY is not set in environment variables");
     }
+
 
     this.API_KEY = process.env.GEMINI_API_KEY;
     this.ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${this.MODEL}:generateContent?key=${this.API_KEY}`;
@@ -67,7 +69,7 @@ ${logs.join("\n")}
 
   private async callLLM(prompt: string): Promise<string> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 50000);
 
     try {
       const response: Response = await fetch(this.ENDPOINT, {
