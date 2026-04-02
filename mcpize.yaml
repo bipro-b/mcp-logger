@@ -3,4 +3,4 @@ runtime: typescript
 build:
   command: npm run build
 start:
-  command: node dist/server.js
+  command: node dist/index.js
