@@ -25,7 +25,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIService = void 0;
 const dotenv = __importStar(require("dotenv"));
-dotenv.config();
+dotenv.config({ quiet: true });
 class AIService {
     API_KEY;
     // private readonly MODEL = "gemini-3-flash-preview";
