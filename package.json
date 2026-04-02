@@ -1,22 +1,23 @@
 {
   "name": "zerotrust-log-ai",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev src/server.ts"
+    "dev": "ts-node-dev src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Bipro",
   "license": "ISC",
-  "description": "",
+  "description": "Securely analyze logs and suggest fixes using AI without leaking secrets.",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
     "dotenv": "^17.3.1",
-    "node-fetch": "^3.3.2",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^6.0.2"
+    "ts-node-dev": "^2.0.0"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0"
+    "@types/node": "^25.5.0",
+    "typescript": "^5.4.5"
   }
 }

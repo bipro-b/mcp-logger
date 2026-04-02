@@ -19,7 +19,8 @@ export type GeminiErrorResponse = {
 
 export class AIService {
   private readonly API_KEY: string;
-  private readonly MODEL = "gemini-3-flash-preview";
+  // private readonly MODEL = "gemini-3-flash-preview";
+  private readonly MODEL = "gemini-2.5-flash";
   private readonly ENDPOINT: string;
 
   
