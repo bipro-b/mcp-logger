@@ -1,5 +1,5 @@
 name: zerotrust-log-ai
-runtime: nodejs
+runtime: typescript
 build:
   command: npm run build
 start:
