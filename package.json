@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev src/server.ts",
+    "dev": "tsc --watch",
+    "dev:run": "node dist/server.js",
     "build": "tsc",
     "start": "node dist/server.js"
   },
@@ -13,11 +14,11 @@
   "description": "Securely analyze logs and suggest fixes using AI without leaking secrets.",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
-    "dotenv": "^17.3.1",
-    "ts-node-dev": "^2.0.0"
+    "dotenv": "^17.3.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"
   }
 }

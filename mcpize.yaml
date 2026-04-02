@@ -1,0 +1,6 @@
+name: zerotrust-log-ai
+runtime: nodejs
+build:
+  command: npm run build
+start:
+  command: npm run start

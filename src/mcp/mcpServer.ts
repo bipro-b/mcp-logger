@@ -1,6 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerAnalyzeLogsTool } from "./tools/analyzeLogs.tool";
+import { registerAnalyzeLogsTool } from "./tools/analyzeLogs.tool.js";
 
 export function createMCPServer() {
   const server = new Server(

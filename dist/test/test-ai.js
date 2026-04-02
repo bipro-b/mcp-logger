@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const ai_service_1 = require("../modules/ai/ai.service");
+const ai_service_js_1 = require("../modules/ai/ai.service.js");
 const dotenv = __importStar(require("dotenv"));
 // Load environment variables
 dotenv.config();
@@ -79,7 +79,7 @@ function generateChaosLogs() {
     return logs;
 }
 async function run() {
-    const aiService = new ai_service_1.AIService();
+    const aiService = new ai_service_js_1.AIService();
     console.log("🛠️ Generating 1,000 lines of chaos logs...");
     const logs = generateChaosLogs();
     // Note: The detected issue is what the "user" or "monitor" initially sees

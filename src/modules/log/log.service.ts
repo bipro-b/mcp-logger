@@ -1,4 +1,4 @@
-import { LogStreamer } from "./log.streamer";
+import { LogStreamer } from "./log.streamer.js";
 
 export class LogService {
   private streamer = new LogStreamer();

@@ -1,4 +1,4 @@
-import { SANITIZATION_PATTERNS } from "./patterns";
+import { SANITIZATION_PATTERNS } from "./patterns.js";
 
 export class SanitizerService {
   sanitizeLine(line: string): string {

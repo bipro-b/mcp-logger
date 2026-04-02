@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LogService = void 0;
-const log_streamer_1 = require("./log.streamer");
+const log_streamer_js_1 = require("./log.streamer.js");
 class LogService {
-    streamer = new log_streamer_1.LogStreamer();
+    streamer = new log_streamer_js_1.LogStreamer();
     async getLogs(input) {
         if (input.log_text) {
             return this.handleRawText(input.log_text);

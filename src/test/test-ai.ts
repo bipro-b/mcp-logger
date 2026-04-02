@@ -1,4 +1,4 @@
-import { AIService } from "../modules/ai/ai.service";
+import { AIService } from "../modules/ai/ai.service.js";
 import * as dotenv from "dotenv";
 
 // Load environment variables

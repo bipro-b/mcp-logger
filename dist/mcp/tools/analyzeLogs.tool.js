@@ -2,14 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerAnalyzeLogsTool = void 0;
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
-const log_service_1 = require("../../modules/log/log.service");
-const sanitizer_service_1 = require("../../modules/sanitizer/sanitizer.service");
-const analyzer_service_1 = require("../../modules/analyzer/analyzer.service");
-const ai_service_1 = require("../../modules/ai/ai.service");
-const logService = new log_service_1.LogService();
-const sanitizer = new sanitizer_service_1.SanitizerService();
-const analyzer = new analyzer_service_1.AnalyzerService();
-const aiService = new ai_service_1.AIService();
+const log_service_js_1 = require("../../modules/log/log.service.js");
+const sanitizer_service_js_1 = require("../../modules/sanitizer/sanitizer.service.js");
+const analyzer_service_js_1 = require("../../modules/analyzer/analyzer.service.js");
+const ai_service_js_1 = require("../../modules/ai/ai.service.js");
+const logService = new log_service_js_1.LogService();
+const sanitizer = new sanitizer_service_js_1.SanitizerService();
+const analyzer = new analyzer_service_js_1.AnalyzerService();
+const aiService = new ai_service_js_1.AIService();
 function registerAnalyzeLogsTool(server) {
     /**
      * 1. TOOL DISCOVERY

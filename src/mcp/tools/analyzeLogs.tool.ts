@@ -4,10 +4,10 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { LogService } from "../../modules/log/log.service";
-import { SanitizerService } from "../../modules/sanitizer/sanitizer.service";
-import { AnalyzerService } from "../../modules/analyzer/analyzer.service";
-import { AIService } from "../../modules/ai/ai.service";
+import { LogService } from "../../modules/log/log.service.js";
+import { SanitizerService } from "../../modules/sanitizer/sanitizer.service.js";
+import { AnalyzerService } from "../../modules/analyzer/analyzer.service.js";
+import { AIService } from "../../modules/ai/ai.service.js";
 
 const logService = new LogService();
 const sanitizer = new SanitizerService();
