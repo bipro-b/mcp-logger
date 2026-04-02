@@ -2,5 +2,3 @@ name: zerotrust-log-ai
 runtime: typescript
 build:
   command: npm run build
-start:
-  command: node dist/server.js

@@ -2,12 +2,10 @@
   "name": "zerotrust-log-ai",
   "version": "1.0.0",
   "main": "dist/server.js",
-  "scripts": {
-    "dev": "tsc --watch",
-    "dev:run": "node dist/server.js",
-    "build": "tsc",
-    "start": "node dist/server.js"
-  },
+"scripts": {
+  "build": "tsc",
+  "start": "node dist/server.js"
+},
   "keywords": [],
   "author": "Bipro",
   "license": "ISC",
