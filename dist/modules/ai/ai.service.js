@@ -9,14 +9,14 @@ class AIService {
             throw new Error("GEMINI_API_KEY not set");
         return `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`;
     }
-    async analyzeLogs(logs, detectedIssue) {
+    async analyzeLogs(logs, detectedIssue, sources) {
         if (!process.env.GEMINI_API_KEY)
             return this.fallbackResponse(detectedIssue);
         try {
-            return await this.generateText(this.buildAnalysisPrompt(logs, detectedIssue));
+            return await this.generateText(this.buildAnalysisPrompt(logs, detectedIssue, sources));
         }
         catch (err) {
-            process.stderr.write(`AI analysis error: ${err instanceof Error ? err.message : String(err)}\n`);
+            process.stderr.write(`AI error: ${err instanceof Error ? err.message : String(err)}\n`);
             return this.fallbackResponse(detectedIssue);
         }
     }
@@ -39,7 +39,7 @@ class AIService {
         }
         catch (err) {
             if (err instanceof Error && err.name === "AbortError") {
-                throw new Error("Gemini API request timed out");
+                throw new Error("AI request timed out after 50s");
             }
             throw err;
         }
@@ -47,24 +47,38 @@ class AIService {
             clearTimeout(timeout);
         }
     }
-    buildAnalysisPrompt(logs, issue) {
-        return `You are a senior DevOps SRE.
+    buildAnalysisPrompt(logs, issue, sources) {
+        const multiServiceNote = sources && sources.length > 1
+            ? `These logs come from ${sources.length} services: ${sources.join(", ")}. Look for cross-service cascade patterns and identify which service originated the failure.\n\n`
+            : "";
+        return `You are a senior SRE with 10+ years of production incident response experience.
 
-Return ONLY in this format:
+The logs below have been sanitized — sensitive data is replaced with [REDACTED_*] placeholders.
 
-Root Cause:
-<cause>
+${multiServiceNote}Return EXACTLY this format. No extra text before or after:
 
-Fix:
-<commands + steps>
+ROOT_CAUSE:
+<Single sentence: the actual originating failure, not a symptom. Example: "Redis pod was OOM-killed due to missing maxmemory-policy, causing connection pool exhaustion upstream.">
 
-Explanation:
-<short explanation>
+IMPACT:
+<Which services or users were affected and how severely>
 
-Detected Issue:
-${issue}
+FIX_COMMANDS:
+<Each command on its own line. Exact commands only — no inline explanations, no numbering>
 
-Logs:
+EXPLANATION:
+<2-3 sentences describing the failure chain from root cause to visible impact>
+
+CONFIDENCE: <HIGH|MEDIUM|LOW>
+CONFIDENCE_REASON: <One sentence — why you are or are not confident>
+
+WATCH_AFTER_FIX:
+<What log pattern or metric confirms the fix worked>
+
+---
+Issue category detected: ${issue}
+
+Log data:
 ${logs.join("\n")}`;
     }
     parseError(errorData, fallback) {
@@ -75,7 +89,7 @@ ${logs.join("\n")}`;
         return fallback;
     }
     fallbackResponse(issue) {
-        return `⚠️ [Fallback Mode] AI Analysis unavailable.\n🔍 Issue: ${issue}\nCheck API key, quota, or network.`;
+        return `⚠️ AI analysis unavailable — no API key configured.\n🔍 Detected: ${issue}\nConfigure GEMINI_API_KEY to enable AI-powered root cause analysis.`;
     }
 }
 exports.AIService = AIService;

@@ -26,35 +26,38 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LogStreamer = void 0;
 const fs = __importStar(require("fs"));
 const readline = __importStar(require("readline"));
+const ERROR_KEYWORDS = /error|fatal|panic|exception|fail|timeout|refused|oom|killed|crash|evict/i;
 class LogStreamer {
-    async streamFile(filePath, maxLines = 500) {
+    async streamFile(filePath, maxLines = 10_000) {
         return new Promise((resolve, reject) => {
             if (!fs.existsSync(filePath)) {
-                return reject(new Error("Log file not found"));
+                return reject(new Error(`Log file not found: ${filePath}`));
             }
-            const stream = fs.createReadStream(filePath, {
-                encoding: "utf-8",
-            });
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity,
-            });
+            const stream = fs.createReadStream(filePath, { encoding: "utf-8" });
+            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
             const lines = [];
-            // Fix TS7006: Tell TS 'line' is a string
             rl.on("line", (line) => {
                 lines.push(line);
                 if (lines.length > maxLines) {
                     lines.shift();
                 }
             });
-            rl.on("close", () => {
-                resolve(lines);
-            });
-            // Fix TS7006: Tell TS 'err' is an Error object
-            rl.on("error", (err) => {
-                reject(err);
-            });
+            rl.on("close", () => resolve(lines));
+            rl.on("error", (err) => reject(err));
         });
+    }
+    smartSample(lines, targetSize = 2_000) {
+        if (lines.length <= targetSize)
+            return lines;
+        // Always keep the most recent 50%
+        const recentCount = Math.floor(targetSize * 0.5);
+        const recent = lines.slice(-recentCount);
+        // From the older portion, pull only error/warning lines
+        const earlier = lines.slice(0, lines.length - recentCount);
+        const errorLines = earlier.filter((line) => ERROR_KEYWORDS.test(line));
+        // Fill remaining quota from older error lines
+        const errorSample = errorLines.slice(-(targetSize - recentCount));
+        return [...errorSample, ...recent];
     }
 }
 exports.LogStreamer = LogStreamer;
