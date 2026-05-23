@@ -28,6 +28,7 @@ const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
 const streamableHttp_js_1 = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const http = __importStar(require("http"));
+const ratelimit_service_js_1 = require("../modules/ratelimit/ratelimit.service.js");
 const analyzeLogs_tool_js_1 = require("./tools/analyzeLogs.tool.js");
 const executeFix_tool_js_1 = require("./tools/executeFix.tool.js");
 const verifyResolution_tool_js_1 = require("./tools/verifyResolution.tool.js");
@@ -42,6 +43,14 @@ const TOOLS = [
     healthCheck_tool_js_1.healthCheckToolDef,
     logCompare_tool_js_1.logCompareToolDef,
 ];
+// 100 requests per hour per IP
+const rateLimiter = new ratelimit_service_js_1.RateLimiter(100, 60);
+function getClientIP(req) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string")
+        return forwarded.split(",")[0].trim();
+    return req.socket.remoteAddress ?? "unknown";
+}
 function createMCPServer() {
     const server = new index_js_1.Server({ name: "zerotrust-log-ai", version: "2.0.0" }, { capabilities: { tools: {} } });
     server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -49,18 +58,12 @@ function createMCPServer() {
         const args = request.params.arguments;
         try {
             switch (request.params.name) {
-                case "analyze_logs":
-                    return await (0, analyzeLogs_tool_js_1.handleAnalyzeLogs)(args);
-                case "execute_fix":
-                    return await (0, executeFix_tool_js_1.handleExecuteFix)(args);
-                case "verify_resolution":
-                    return await (0, verifyResolution_tool_js_1.handleVerifyResolution)(args);
-                case "incident_report":
-                    return await (0, incidentReport_tool_js_1.handleIncidentReport)(args);
-                case "health_check":
-                    return await (0, healthCheck_tool_js_1.handleHealthCheck)(args);
-                case "log_compare":
-                    return await (0, logCompare_tool_js_1.handleLogCompare)(args);
+                case "analyze_logs": return await (0, analyzeLogs_tool_js_1.handleAnalyzeLogs)(args);
+                case "execute_fix": return await (0, executeFix_tool_js_1.handleExecuteFix)(args);
+                case "verify_resolution": return await (0, verifyResolution_tool_js_1.handleVerifyResolution)(args);
+                case "incident_report": return await (0, incidentReport_tool_js_1.handleIncidentReport)(args);
+                case "health_check": return await (0, healthCheck_tool_js_1.handleHealthCheck)(args);
+                case "log_compare": return await (0, logCompare_tool_js_1.handleLogCompare)(args);
                 default:
                     return {
                         content: [{ type: "text", text: `Unknown tool: ${request.params.name}` }],
@@ -70,12 +73,10 @@ function createMCPServer() {
         }
         catch (err) {
             return {
-                content: [
-                    {
+                content: [{
                         type: "text",
-                        text: `❌ Tool error: ${err instanceof Error ? err.message : String(err)}`,
-                    },
-                ],
+                        text: `❌ ${err instanceof Error ? err.message : String(err)}`,
+                    }],
                 isError: true,
             };
         }
@@ -92,19 +93,30 @@ async function startServer() {
             return;
         }
         if (req.url === "/" || req.url === "/mcp") {
-            const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
-                sessionIdGenerator: undefined,
-            });
+            const ip = getClientIP(req);
+            const limit = rateLimiter.check(ip);
+            if (!limit.allowed) {
+                res.writeHead(429, {
+                    "Content-Type": "application/json",
+                    "Retry-After": String(limit.retryAfter ?? 3600),
+                });
+                res.end(JSON.stringify({
+                    error: `Rate limit exceeded. Try again in ${limit.retryAfter}s.`,
+                }));
+                return;
+            }
+            res.setHeader("X-RateLimit-Remaining", String(limit.remaining));
+            const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
             const server = createMCPServer();
             await server.connect(transport);
             await transport.handleRequest(req, res);
             return;
         }
-        res.writeHead(405);
+        res.writeHead(404);
         res.end();
     });
     httpServer.listen(port, () => {
-        process.stderr.write(`ZeroTrust Log AI v2.0 — MCP server on port ${port} (${TOOLS.length} tools)\n`);
+        process.stderr.write(`ZeroTrust Log AI v2.0 — MCP server on port ${port} (${TOOLS.length} tools, rate-limited)\n`);
     });
 }
 exports.startServer = startServer;

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleExecuteFix = exports.executeFixToolDef = void 0;
 const executor_service_js_1 = require("../../modules/executor/executor.service.js");
 const whitelist_js_1 = require("../../modules/executor/whitelist.js");
+const input_validator_js_1 = require("../../modules/validation/input.validator.js");
 const executor = new executor_service_js_1.ExecutorService();
 exports.executeFixToolDef = {
     name: "execute_fix",
@@ -36,6 +37,10 @@ async function handleExecuteFix(rawArgs) {
     const args = (rawArgs ?? {});
     if (!args.commands || args.commands.length === 0) {
         return { content: [{ type: "text", text: "No commands provided." }], isError: true };
+    }
+    const commandError = (0, input_validator_js_1.validateCommandInput)(args.commands);
+    if (commandError) {
+        return { content: [{ type: "text", text: `❌ ${commandError}` }], isError: true };
     }
     // generate_script mode — validate and return portable bash script
     if (args.generate_script) {

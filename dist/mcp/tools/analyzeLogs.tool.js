@@ -27,9 +27,11 @@ exports.handleAnalyzeLogs = exports.analyzeLogsToolDef = void 0;
 const path = __importStar(require("path"));
 const log_service_js_1 = require("../../modules/log/log.service.js");
 const log_streamer_js_1 = require("../../modules/log/log.streamer.js");
+const log_formatter_js_1 = require("../../modules/log/log.formatter.js");
 const sanitizer_service_js_1 = require("../../modules/sanitizer/sanitizer.service.js");
 const analyzer_service_js_1 = require("../../modules/analyzer/analyzer.service.js");
 const ai_service_js_1 = require("../../modules/ai/ai.service.js");
+const input_validator_js_1 = require("../../modules/validation/input.validator.js");
 const logService = new log_service_js_1.LogService();
 const logStreamer = new log_streamer_js_1.LogStreamer();
 const sanitizer = new sanitizer_service_js_1.SanitizerService();
@@ -37,7 +39,7 @@ const analyzer = new analyzer_service_js_1.AnalyzerService();
 const aiService = new ai_service_js_1.AIService();
 exports.analyzeLogsToolDef = {
     name: "analyze_logs",
-    description: "Securely analyze infrastructure logs — single or multi-service. Redacts all secrets locally, detects root cause, and returns exact fix commands. Supports up to 10 log files simultaneously for cross-service correlation.",
+    description: "Securely analyze infrastructure logs — single or multi-service. Redacts all secrets locally before any AI processing. Supports plain text, JSON structured logs, and up to 10 simultaneous log files for cross-service correlation.",
     inputSchema: {
         type: "object",
         properties: {
@@ -48,11 +50,11 @@ exports.analyzeLogsToolDef = {
             log_paths: {
                 type: "array",
                 items: { type: "string" },
-                description: "Array of log file paths for multi-service correlation (up to 10 files). Each line is labeled with its source filename.",
+                description: "Array of log file paths for multi-service correlation (up to 10). Lines are labeled with source filename and sorted by timestamp automatically.",
             },
             log_text: {
                 type: "string",
-                description: "Raw log content as a string",
+                description: "Raw log content as a string (max 5MB)",
             },
         },
     },
@@ -66,13 +68,22 @@ async function handleAnalyzeLogs(rawArgs) {
             isError: true,
         };
     }
+    // P0: input size validation
+    const validationError = (0, input_validator_js_1.validateLogInput)({
+        log_text: args.log_text,
+        log_paths: args.log_paths,
+    });
+    if (validationError) {
+        return { content: [{ type: "text", text: `❌ ${validationError}` }], isError: true };
+    }
     const rawLogs = await logService.getLogs(args);
     if (!rawLogs || rawLogs.length === 0) {
         return { content: [{ type: "text", text: "⚠️ No logs found or empty input." }] };
     }
-    // Smart sample large inputs (keep errors from full file + recent lines)
+    // Pipeline: smart sample → format JSON lines → redact secrets → analyze
     const sampled = logStreamer.smartSample(rawLogs, 2_000);
-    const sanitizedLogs = sanitizer.sanitizeLogs(sampled);
+    const formatted = (0, log_formatter_js_1.formatLogLines)(sampled);
+    const sanitizedLogs = sanitizer.sanitizeLogs(formatted);
     let importantLines = [];
     let detectedIssue = "Unknown issue";
     try {
@@ -82,15 +93,17 @@ async function handleAnalyzeLogs(rawArgs) {
     catch {
         importantLines = sanitizedLogs.slice(-50);
     }
-    // Pass source names to AI for multi-file context
     const sources = args.log_paths?.map((p) => path.basename(p));
     const aiResult = await Promise.race([
         aiService.analyzeLogs(importantLines, detectedIssue, sources),
         new Promise((resolve) => setTimeout(() => resolve("⚠️ AI response timed out after 30s"), 30_000)),
     ]);
     const preview = importantLines.slice(-10).join("\n");
-    const fileCount = args.log_paths ? args.log_paths.length : 1;
-    const sourceLabel = args.log_paths ? `${fileCount} files (${args.log_paths.map((p) => path.basename(p)).join(", ")})` : args.log_path ? path.basename(args.log_path) : "direct input";
+    const sourceLabel = args.log_paths
+        ? `${args.log_paths.length} files — ${args.log_paths.map((p) => path.basename(p)).join(", ")}`
+        : args.log_path
+            ? path.basename(args.log_path)
+            : "direct input";
     return {
         content: [
             {
@@ -108,12 +121,11 @@ async function handleAnalyzeLogs(rawArgs) {
                     aiResult,
                     ``,
                     `🔐 Security:`,
-                    `✔ ${SANITIZATION_PATTERN_COUNT} redaction patterns applied before AI processing`,
-                    `✔ No credentials, tokens, or IPs were exposed`,
+                    `✔ 15 redaction patterns applied (AWS keys, DB URLs, tokens, passwords, JWTs, and more)`,
+                    `✔ No credentials or IPs were sent to AI`,
                 ].join("\n"),
             },
         ],
     };
 }
 exports.handleAnalyzeLogs = handleAnalyzeLogs;
-const SANITIZATION_PATTERN_COUNT = 15;

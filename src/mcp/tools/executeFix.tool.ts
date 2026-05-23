@@ -1,5 +1,6 @@
 import { ExecutorService } from "../../modules/executor/executor.service.js";
 import { validateCommand } from "../../modules/executor/whitelist.js";
+import { validateCommandInput } from "../../modules/validation/input.validator.js";
 
 const executor = new ExecutorService();
 
@@ -47,6 +48,11 @@ export async function handleExecuteFix(
 
   if (!args.commands || args.commands.length === 0) {
     return { content: [{ type: "text", text: "No commands provided." }], isError: true };
+  }
+
+  const commandError = validateCommandInput(args.commands);
+  if (commandError) {
+    return { content: [{ type: "text", text: `❌ ${commandError}` }], isError: true };
   }
 
   // generate_script mode — validate and return portable bash script
