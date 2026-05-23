@@ -39,36 +39,54 @@ const analyzer = new analyzer_service_js_1.AnalyzerService();
 const aiService = new ai_service_js_1.AIService();
 exports.analyzeLogsToolDef = {
     name: "analyze_logs",
-    description: "Securely analyze infrastructure logs — single or multi-service. Redacts all secrets locally before any AI processing. Supports plain text, JSON structured logs, and up to 10 simultaneous log files for cross-service correlation.",
+    description: "Securely analyze infrastructure logs. Redacts all secrets locally before any AI processing. Supports plain text, JSON structured logs, .gz compressed files, HTTP/HTTPS URLs (presigned S3/GCS), and up to 10 simultaneous log files for cross-service correlation.",
     inputSchema: {
         type: "object",
         properties: {
             log_path: {
                 type: "string",
-                description: "Absolute path to a single log file",
+                description: "Absolute path to a log file (.log or .gz)",
             },
             log_paths: {
                 type: "array",
                 items: { type: "string" },
-                description: "Array of log file paths for multi-service correlation (up to 10). Lines are labeled with source filename and sorted by timestamp automatically.",
+                description: "Multiple log file paths for cross-service correlation (up to 10). Lines are labeled with filename and sorted by timestamp.",
             },
             log_text: {
                 type: "string",
                 description: "Raw log content as a string (max 5MB)",
+            },
+            log_url: {
+                type: "string",
+                description: "HTTP/HTTPS URL to fetch logs from — supports presigned S3 URLs, GCS signed URLs, or any endpoint returning plain text logs (max 5MB)",
+            },
+            kubectl_log: {
+                type: "object",
+                description: "Fetch logs directly from a Kubernetes pod (requires kubectl configured on this machine — self-hosted mode only)",
+                properties: {
+                    pod: { type: "string", description: "Pod name" },
+                    namespace: { type: "string", description: "Kubernetes namespace" },
+                    container: { type: "string", description: "Container name (optional)" },
+                    tail: { type: "number", description: "Number of lines to fetch (default 500, max 5000)" },
+                },
+                required: ["pod", "namespace"],
             },
         },
     },
 };
 async function handleAnalyzeLogs(rawArgs) {
     const args = (rawArgs ?? {});
-    const hasInput = args.log_path || args.log_text || (args.log_paths && args.log_paths.length > 0);
+    const hasInput = args.log_path ||
+        args.log_text ||
+        args.log_url ||
+        args.kubectl_log ||
+        (args.log_paths && args.log_paths.length > 0);
     if (!hasInput) {
         return {
-            content: [{ type: "text", text: "Provide log_path, log_paths, or log_text." }],
+            content: [{ type: "text", text: "Provide one of: log_path, log_paths, log_text, log_url, or kubectl_log." }],
             isError: true,
         };
     }
-    // P0: input size validation
     const validationError = (0, input_validator_js_1.validateLogInput)({
         log_text: args.log_text,
         log_paths: args.log_paths,
@@ -80,7 +98,7 @@ async function handleAnalyzeLogs(rawArgs) {
     if (!rawLogs || rawLogs.length === 0) {
         return { content: [{ type: "text", text: "⚠️ No logs found or empty input." }] };
     }
-    // Pipeline: smart sample → format JSON lines → redact secrets → analyze
+    // Pipeline: smart sample → parse JSON lines → redact secrets → analyze
     const sampled = logStreamer.smartSample(rawLogs, 2_000);
     const formatted = (0, log_formatter_js_1.formatLogLines)(sampled);
     const sanitizedLogs = sanitizer.sanitizeLogs(formatted);
@@ -99,11 +117,15 @@ async function handleAnalyzeLogs(rawArgs) {
         new Promise((resolve) => setTimeout(() => resolve("⚠️ AI response timed out after 30s"), 30_000)),
     ]);
     const preview = importantLines.slice(-10).join("\n");
-    const sourceLabel = args.log_paths
-        ? `${args.log_paths.length} files — ${args.log_paths.map((p) => path.basename(p)).join(", ")}`
-        : args.log_path
-            ? path.basename(args.log_path)
-            : "direct input";
+    let sourceLabel = "direct input";
+    if (args.log_paths)
+        sourceLabel = `${args.log_paths.length} files — ${args.log_paths.map((p) => path.basename(p)).join(", ")}`;
+    else if (args.log_path)
+        sourceLabel = path.basename(args.log_path);
+    else if (args.log_url)
+        sourceLabel = `remote URL`;
+    else if (args.kubectl_log)
+        sourceLabel = `kubectl: ${args.kubectl_log.pod} (${args.kubectl_log.namespace})`;
     return {
         content: [
             {
@@ -121,8 +143,8 @@ async function handleAnalyzeLogs(rawArgs) {
                     aiResult,
                     ``,
                     `🔐 Security:`,
-                    `✔ 15 redaction patterns applied (AWS keys, DB URLs, tokens, passwords, JWTs, and more)`,
-                    `✔ No credentials or IPs were sent to AI`,
+                    `✔ 16 redaction patterns applied (AWS keys, DB URLs, tokens, passwords, IPs, IPv6, and more)`,
+                    `✔ No credentials were sent to AI`,
                 ].join("\n"),
             },
         ],

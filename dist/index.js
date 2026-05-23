@@ -26,7 +26,24 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv = __importStar(require("dotenv"));
 dotenv.config({ quiet: true });
 const mcpServer_js_1 = require("./mcp/mcpServer.js");
-(0, mcpServer_js_1.startServer)().catch((err) => {
-    process.stderr.write(`Server failed: ${err}\n`);
+(0, mcpServer_js_1.startServer)()
+    .then((server) => {
+    const shutdown = (signal) => {
+        process.stderr.write(`${signal} received — shutting down gracefully\n`);
+        server.close(() => {
+            process.stderr.write("Server closed — all connections finished\n");
+            process.exit(0);
+        });
+        // Force exit after 30s if connections won't drain
+        setTimeout(() => {
+            process.stderr.write("Force shutdown after 30s\n");
+            process.exit(1);
+        }, 30_000).unref();
+    };
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+})
+    .catch((err) => {
+    process.stderr.write(`Server failed to start: ${err}\n`);
     process.exit(1);
 });

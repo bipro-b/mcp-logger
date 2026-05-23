@@ -4,6 +4,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprot
 import * as http from "http";
 
 import { RateLimiter } from "../modules/ratelimit/ratelimit.service.js";
+import { metrics } from "../modules/metrics/metrics.service.js";
 import { analyzeLogsToolDef, handleAnalyzeLogs } from "./tools/analyzeLogs.tool.js";
 import { executeFixToolDef, handleExecuteFix } from "./tools/executeFix.tool.js";
 import { verifyResolutionToolDef, handleVerifyResolution } from "./tools/verifyResolution.tool.js";
@@ -20,8 +21,51 @@ const TOOLS = [
   logCompareToolDef,
 ];
 
-// 100 requests per hour per IP
 const rateLimiter = new RateLimiter(100, 60);
+
+// Health check cache — avoid hitting Gemini on every Cloud Run probe
+let healthCache: { result: Record<string, unknown>; ts: number } | null = null;
+const HEALTH_TTL_MS = 30_000;
+
+async function getHealth(): Promise<Record<string, unknown>> {
+  if (healthCache && Date.now() - healthCache.ts < HEALTH_TTL_MS) {
+    return healthCache.result;
+  }
+
+  const checks: Record<string, string> = {
+    memory_mb: String(Math.round(process.memoryUsage().heapUsed / 1024 / 1024)),
+    uptime_s: String(Math.round(process.uptime())),
+  };
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3_000);
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeout);
+      checks.ai = resp.ok ? "ok" : `error_${resp.status}`;
+    } catch {
+      checks.ai = "unreachable";
+    }
+  } else {
+    checks.ai = "no_key_configured";
+  }
+
+  const ok = checks.ai === "ok" || checks.ai === "no_key_configured";
+  const result = {
+    status: ok ? "ok" : "degraded",
+    version: "2.0.0",
+    tools: TOOLS.length,
+    checks,
+    timestamp: new Date().toISOString(),
+  };
+
+  healthCache = { result, ts: Date.now() };
+  return result;
+}
 
 function getClientIP(req: http.IncomingMessage): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -38,22 +82,33 @@ export function createMCPServer(): Server {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const args = request.params.arguments;
+    const toolName = request.params.name;
+    const start = Date.now();
+    let isError = false;
+
     try {
-      switch (request.params.name) {
-        case "analyze_logs":      return await handleAnalyzeLogs(args);
-        case "execute_fix":       return await handleExecuteFix(args);
-        case "verify_resolution": return await handleVerifyResolution(args);
-        case "incident_report":   return await handleIncidentReport(args);
-        case "health_check":      return await handleHealthCheck(args);
-        case "log_compare":       return await handleLogCompare(args);
+      const args = request.params.arguments;
+      let result;
+
+      switch (toolName) {
+        case "analyze_logs":      result = await handleAnalyzeLogs(args); break;
+        case "execute_fix":       result = await handleExecuteFix(args); break;
+        case "verify_resolution": result = await handleVerifyResolution(args); break;
+        case "incident_report":   result = await handleIncidentReport(args); break;
+        case "health_check":      result = await handleHealthCheck(args); break;
+        case "log_compare":       result = await handleLogCompare(args); break;
         default:
-          return {
-            content: [{ type: "text", text: `Unknown tool: ${request.params.name}` }],
+          isError = true;
+          result = {
+            content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
             isError: true,
           };
       }
+
+      if (result.isError) isError = true;
+      return result;
     } catch (err) {
+      isError = true;
       return {
         content: [{
           type: "text",
@@ -61,16 +116,35 @@ export function createMCPServer(): Server {
         }],
         isError: true,
       };
+    } finally {
+      metrics.record(toolName, Date.now() - start, isError);
     }
   });
 
   return server;
 }
 
-export async function startServer(): Promise<void> {
+export async function startServer(): Promise<http.Server> {
   const port = parseInt(process.env.PORT ?? "8080");
 
   const httpServer = http.createServer(async (req, res) => {
+    // Health check — always 200 so Cloud Run keeps routing traffic
+    // AI degraded = server still works, just without AI features
+    if (req.method === "GET" && req.url === "/health") {
+      const health = await getHealth();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(health));
+      return;
+    }
+
+    // Metrics — usage stats
+    if (req.method === "GET" && req.url === "/metrics") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(metrics.toJSON(), null, 2));
+      return;
+    }
+
+    // Legacy ping
     if (req.method === "GET" && req.url === "/ping") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end("pong");
@@ -82,13 +156,12 @@ export async function startServer(): Promise<void> {
       const limit = rateLimiter.check(ip);
 
       if (!limit.allowed) {
+        metrics.rateLimitHits++;
         res.writeHead(429, {
           "Content-Type": "application/json",
           "Retry-After": String(limit.retryAfter ?? 3600),
         });
-        res.end(JSON.stringify({
-          error: `Rate limit exceeded. Try again in ${limit.retryAfter}s.`,
-        }));
+        res.end(JSON.stringify({ error: `Rate limit exceeded. Retry in ${limit.retryAfter}s.` }));
         return;
       }
 
@@ -107,7 +180,9 @@ export async function startServer(): Promise<void> {
 
   httpServer.listen(port, () => {
     process.stderr.write(
-      `ZeroTrust Log AI v2.0 — MCP server on port ${port} (${TOOLS.length} tools, rate-limited)\n`
+      `ZeroTrust Log AI v2.0 — port ${port} | ${TOOLS.length} tools | rate-limited | audit-logged\n`
     );
   });
+
+  return httpServer;
 }

@@ -1,10 +1,12 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { validateCommand } from "./whitelist.js";
+import { SanitizerService } from "../sanitizer/sanitizer.service.js";
 import type { CommandResult } from "../../types/index.js";
 
 const execAsync = promisify(exec);
 const EXEC_TIMEOUT_MS = 30_000;
+const sanitizer = new SanitizerService();
 
 export class ExecutorService {
   async execute(commands: string[], dry_run = true): Promise<CommandResult[]> {
@@ -52,10 +54,15 @@ export class ExecutorService {
             setTimeout(() => reject(new Error("Command timed out after 30s")), EXEC_TIMEOUT_MS)
           ),
         ]);
+
+        // Sanitize output — command output can contain IPs, credentials, env vars
+        const rawOutput = (stdout || stderr || "(no output)").trim();
+        const sanitizedOutput = sanitizer.sanitizeLogs(rawOutput.split("\n")).join("\n");
+
         results.push({
           command: cmd,
           success: true,
-          output: (stdout || stderr || "(no output)").trim(),
+          output: sanitizedOutput,
           duration_ms: Date.now() - start,
           dry_run: false,
           category: validation.entry?.category,

@@ -4,8 +4,10 @@ exports.ExecutorService = void 0;
 const child_process_1 = require("child_process");
 const util_1 = require("util");
 const whitelist_js_1 = require("./whitelist.js");
+const sanitizer_service_js_1 = require("../sanitizer/sanitizer.service.js");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 const EXEC_TIMEOUT_MS = 30_000;
+const sanitizer = new sanitizer_service_js_1.SanitizerService();
 class ExecutorService {
     async execute(commands, dry_run = true) {
         const results = [];
@@ -46,10 +48,13 @@ class ExecutorService {
                     execAsync(cmd),
                     new Promise((_, reject) => setTimeout(() => reject(new Error("Command timed out after 30s")), EXEC_TIMEOUT_MS)),
                 ]);
+                // Sanitize output — command output can contain IPs, credentials, env vars
+                const rawOutput = (stdout || stderr || "(no output)").trim();
+                const sanitizedOutput = sanitizer.sanitizeLogs(rawOutput.split("\n")).join("\n");
                 results.push({
                     command: cmd,
                     success: true,
-                    output: (stdout || stderr || "(no output)").trim(),
+                    output: sanitizedOutput,
                     duration_ms: Date.now() - start,
                     dry_run: false,
                     category: validation.entry?.category,

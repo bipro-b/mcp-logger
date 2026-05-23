@@ -25,6 +25,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LogStreamer = void 0;
 const fs = __importStar(require("fs"));
+const zlib = __importStar(require("zlib"));
 const readline = __importStar(require("readline"));
 const ERROR_KEYWORDS = /error|fatal|panic|exception|fail|timeout|refused|oom|killed|crash|evict/i;
 class LogStreamer {
@@ -33,14 +34,25 @@ class LogStreamer {
             if (!fs.existsSync(filePath)) {
                 return reject(new Error(`Log file not found: ${filePath}`));
             }
-            const stream = fs.createReadStream(filePath, { encoding: "utf-8" });
-            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            const fileStream = fs.createReadStream(filePath);
+            const isGzipped = filePath.endsWith(".gz") || filePath.endsWith(".gzip");
+            let input;
+            if (isGzipped) {
+                const gunzip = zlib.createGunzip();
+                fileStream.pipe(gunzip);
+                input = gunzip;
+                fileStream.on("error", reject);
+                gunzip.on("error", (err) => reject(new Error(`Failed to decompress: ${err.message}`)));
+            }
+            else {
+                input = fileStream;
+            }
+            const rl = readline.createInterface({ input, crlfDelay: Infinity });
             const lines = [];
             rl.on("line", (line) => {
                 lines.push(line);
-                if (lines.length > maxLines) {
+                if (lines.length > maxLines)
                     lines.shift();
-                }
             });
             rl.on("close", () => resolve(lines));
             rl.on("error", (err) => reject(err));
@@ -49,13 +61,10 @@ class LogStreamer {
     smartSample(lines, targetSize = 2_000) {
         if (lines.length <= targetSize)
             return lines;
-        // Always keep the most recent 50%
         const recentCount = Math.floor(targetSize * 0.5);
         const recent = lines.slice(-recentCount);
-        // From the older portion, pull only error/warning lines
         const earlier = lines.slice(0, lines.length - recentCount);
         const errorLines = earlier.filter((line) => ERROR_KEYWORDS.test(line));
-        // Fill remaining quota from older error lines
         const errorSample = errorLines.slice(-(targetSize - recentCount));
         return [...errorSample, ...recent];
     }

@@ -89,4 +89,10 @@ export const SANITIZATION_PATTERNS = [
     regex: /\b(key|token|secret|credential|hash)\s*[=:]\s*["']?[0-9a-f]{32,}["']?/gi,
     replace: "[REDACTED_SECRET]",
   },
+  // IPv6 addresses (full and compressed forms)
+  {
+    name: "IPV6_ADDRESS",
+    regex: /\b([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b|::([0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4}|([0-9a-f]{1,4}:){1,7}:/gi,
+    replace: "[REDACTED_IPV6]",
+  },
 ];
