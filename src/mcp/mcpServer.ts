@@ -1,18 +1,71 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { registerAnalyzeLogsTool } from "./tools/analyzeLogs.tool.js";
+import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import * as http from "http";
 
-export function createMCPServer() {
+import { analyzeLogsToolDef, handleAnalyzeLogs } from "./tools/analyzeLogs.tool.js";
+import { executeFixToolDef, handleExecuteFix } from "./tools/executeFix.tool.js";
+import { verifyResolutionToolDef, handleVerifyResolution } from "./tools/verifyResolution.tool.js";
+import { incidentReportToolDef, handleIncidentReport } from "./tools/incidentReport.tool.js";
+import { healthCheckToolDef, handleHealthCheck } from "./tools/healthCheck.tool.js";
+import { logCompareToolDef, handleLogCompare } from "./tools/logCompare.tool.js";
+
+const TOOLS = [
+  analyzeLogsToolDef,
+  executeFixToolDef,
+  verifyResolutionToolDef,
+  incidentReportToolDef,
+  healthCheckToolDef,
+  logCompareToolDef,
+];
+
+export function createMCPServer(): Server {
   const server = new Server(
-    { name: "zerotrust-log-ai", version: "1.0.0" },
+    { name: "zerotrust-log-ai", version: "2.0.0" },
     { capabilities: { tools: {} } }
   );
-  registerAnalyzeLogsTool(server);
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const args = request.params.arguments;
+    try {
+      switch (request.params.name) {
+        case "analyze_logs":
+          return await handleAnalyzeLogs(args);
+        case "execute_fix":
+          return await handleExecuteFix(args);
+        case "verify_resolution":
+          return await handleVerifyResolution(args);
+        case "incident_report":
+          return await handleIncidentReport(args);
+        case "health_check":
+          return await handleHealthCheck(args);
+        case "log_compare":
+          return await handleLogCompare(args);
+        default:
+          return {
+            content: [{ type: "text", text: `Unknown tool: ${request.params.name}` }],
+            isError: true,
+          };
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ Tool error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
+
   return server;
 }
 
-export async function startServer() {
+export async function startServer(): Promise<void> {
   const port = parseInt(process.env.PORT ?? "8080");
 
   const httpServer = http.createServer(async (req, res) => {
@@ -37,6 +90,8 @@ export async function startServer() {
   });
 
   httpServer.listen(port, () => {
-    process.stderr.write(`MCP HTTP server listening on port ${port}\n`);
+    process.stderr.write(
+      `ZeroTrust Log AI v2.0 — MCP server on port ${port} (${TOOLS.length} tools)\n`
+    );
   });
 }

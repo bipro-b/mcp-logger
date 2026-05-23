@@ -1,3 +1,6 @@
+import * as dotenv from "dotenv";
+dotenv.config({ quiet: true });
+
 import { startServer } from "./mcp/mcpServer.js";
 
 startServer().catch((err) => {
