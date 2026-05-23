@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleHealthCheck = exports.healthCheckToolDef = void 0;
+const audit_service_js_1 = require("../../modules/audit/audit.service.js");
+const url_validator_js_1 = require("../../modules/validation/url.validator.js");
 exports.healthCheckToolDef = {
     name: "health_check",
     description: "Check HTTP health of multiple service endpoints simultaneously. Returns status, HTTP code, and response time for each endpoint. Ideal for validating that services are up after a fix.",
@@ -52,6 +54,7 @@ async function handleHealthCheck(rawArgs) {
     const up = results.filter((r) => r.status === "up").length;
     const down = results.filter((r) => r.status === "down").length;
     const degraded = results.filter((r) => r.status === "degraded").length;
+    (0, audit_service_js_1.auditLog)({ tool: "health_check", endpoint_count: results.length, success: down === 0 });
     const statusLine = down > 0
         ? `🔴 ${down} service(s) DOWN — action required`
         : degraded > 0
@@ -89,6 +92,15 @@ async function checkEndpoint(ep) {
             status: "down",
             response_time_ms: 0,
             error: "URL must start with http:// or https://",
+        };
+    }
+    if ((0, url_validator_js_1.isSsrfUrl)(ep.url)) {
+        return {
+            endpoint: ep.url,
+            name,
+            status: "down",
+            response_time_ms: 0,
+            error: "Blocked: internal/private address not accessible from Cloud Run",
         };
     }
     const controller = new AbortController();

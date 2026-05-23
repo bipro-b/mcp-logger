@@ -11,7 +11,7 @@ export type GeminiErrorResponse = {
 };
 
 const MODEL = "gemini-2.5-flash";
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 export class AIService {
@@ -61,7 +61,7 @@ export class AIService {
 
   private async callGemini(prompt: string): Promise<string> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 50_000);
+    const timeout = setTimeout(() => controller.abort(), 25_000);
 
     try {
       const response = await fetch(this.endpoint, {

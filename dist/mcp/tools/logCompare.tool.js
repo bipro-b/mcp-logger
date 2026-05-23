@@ -2,9 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleLogCompare = exports.logCompareToolDef = void 0;
 const log_service_js_1 = require("../../modules/log/log.service.js");
+const log_streamer_js_1 = require("../../modules/log/log.streamer.js");
 const sanitizer_service_js_1 = require("../../modules/sanitizer/sanitizer.service.js");
 const analyzer_service_js_1 = require("../../modules/analyzer/analyzer.service.js");
+const audit_service_js_1 = require("../../modules/audit/audit.service.js");
 const logService = new log_service_js_1.LogService();
+const logStreamer = new log_streamer_js_1.LogStreamer();
 const sanitizer = new sanitizer_service_js_1.SanitizerService();
 const analyzer = new analyzer_service_js_1.AnalyzerService();
 exports.logCompareToolDef = {
@@ -51,10 +54,10 @@ async function handleLogCompare(rawArgs) {
         logService.getLogs({ log_text: args.after_text, log_path: args.after_path }),
     ]);
     const beforeErrors = new Set(analyzer
-        .extractImportantLines(sanitizer.sanitizeLogs(beforeRaw.slice(-500)))
+        .extractImportantLines(sanitizer.sanitizeLogs(logStreamer.foldStackTraces(beforeRaw.slice(-500))))
         .map(normalizeErrorLine));
     const afterErrors = new Set(analyzer
-        .extractImportantLines(sanitizer.sanitizeLogs(afterRaw.slice(-500)))
+        .extractImportantLines(sanitizer.sanitizeLogs(logStreamer.foldStackTraces(afterRaw.slice(-500))))
         .map(normalizeErrorLine));
     const resolved = [...beforeErrors].filter((e) => !afterErrors.has(e));
     const newErrors = [...afterErrors].filter((e) => !beforeErrors.has(e));
@@ -87,6 +90,7 @@ async function handleLogCompare(rawArgs) {
         ``,
         `🔐 All log content was locally redacted before analysis.`,
     ].join("\n");
+    (0, audit_service_js_1.auditLog)({ tool: "log_compare", regression_risk: regressionRisk, success: true });
     return { content: [{ type: "text", text }] };
 }
 exports.handleLogCompare = handleLogCompare;

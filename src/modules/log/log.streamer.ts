@@ -4,6 +4,7 @@ import * as readline from "readline";
 import type { Readable } from "stream";
 
 const ERROR_KEYWORDS = /error|fatal|panic|exception|fail|timeout|refused|oom|killed|crash|evict/i;
+const STACK_CONTINUATION = /^(\t|\s{4,}|Caused by:|\.\.\..*\d+ more)/;
 
 export class LogStreamer {
   async streamFile(filePath: string, maxLines = 10_000): Promise<string[]> {
@@ -37,6 +38,18 @@ export class LogStreamer {
       rl.on("close", () => resolve(lines));
       rl.on("error", (err: Error) => reject(err));
     });
+  }
+
+  foldStackTraces(lines: string[]): string[] {
+    const result: string[] = [];
+    for (const line of lines) {
+      if (result.length > 0 && STACK_CONTINUATION.test(line)) {
+        result[result.length - 1] += "\n" + line;
+      } else {
+        result.push(line);
+      }
+    }
+    return result;
   }
 
   smartSample(lines: string[], targetSize = 2_000): string[] {

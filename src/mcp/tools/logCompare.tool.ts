@@ -1,8 +1,11 @@
 import { LogService } from "../../modules/log/log.service.js";
+import { LogStreamer } from "../../modules/log/log.streamer.js";
 import { SanitizerService } from "../../modules/sanitizer/sanitizer.service.js";
 import { AnalyzerService } from "../../modules/analyzer/analyzer.service.js";
+import { auditLog } from "../../modules/audit/audit.service.js";
 
 const logService = new LogService();
+const logStreamer = new LogStreamer();
 const sanitizer = new SanitizerService();
 const analyzer = new AnalyzerService();
 
@@ -65,12 +68,12 @@ export async function handleLogCompare(
 
   const beforeErrors = new Set(
     analyzer
-      .extractImportantLines(sanitizer.sanitizeLogs(beforeRaw.slice(-500)))
+      .extractImportantLines(sanitizer.sanitizeLogs(logStreamer.foldStackTraces(beforeRaw.slice(-500))))
       .map(normalizeErrorLine)
   );
   const afterErrors = new Set(
     analyzer
-      .extractImportantLines(sanitizer.sanitizeLogs(afterRaw.slice(-500)))
+      .extractImportantLines(sanitizer.sanitizeLogs(logStreamer.foldStackTraces(afterRaw.slice(-500))))
       .map(normalizeErrorLine)
   );
 
@@ -111,6 +114,8 @@ export async function handleLogCompare(
     ``,
     `🔐 All log content was locally redacted before analysis.`,
   ].join("\n");
+
+  auditLog({ tool: "log_compare", regression_risk: regressionRisk, success: true });
 
   return { content: [{ type: "text", text }] };
 }

@@ -26,6 +26,7 @@ class MetricsService {
             };
         }
         return {
+            note: "counts reset on process restart — Cloud Run may spin up multiple instances",
             uptime_seconds: Math.round((Date.now() - this.startTime) / 1000),
             tools: toolStats,
             ai: this.aiCalls,

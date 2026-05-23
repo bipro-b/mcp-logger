@@ -1,5 +1,6 @@
 import { ReporterService } from "../../modules/reporter/reporter.service.js";
 import type { CommandResult, VerificationResult } from "../../types/index.js";
+import { auditLog } from "../../modules/audit/audit.service.js";
 
 const reporter = new ReporterService();
 
@@ -78,6 +79,8 @@ export async function handleIncidentReport(
     log_source: args.log_source,
     started_at: args.started_at,
   });
+
+  auditLog({ tool: "incident_report", incident_id, resolved: verification.resolved, success: true });
 
   return { content: [{ type: "text", text: report }] };
 }

@@ -1,4 +1,6 @@
 import type { HealthCheckResult } from "../../types/index.js";
+import { auditLog } from "../../modules/audit/audit.service.js";
+import { isSsrfUrl } from "../../modules/validation/url.validator.js";
 
 export const healthCheckToolDef = {
   name: "health_check",
@@ -71,6 +73,8 @@ export async function handleHealthCheck(
   const down = results.filter((r) => r.status === "down").length;
   const degraded = results.filter((r) => r.status === "degraded").length;
 
+  auditLog({ tool: "health_check", endpoint_count: results.length, success: down === 0 });
+
   const statusLine =
     down > 0
       ? `🔴 ${down} service(s) DOWN — action required`
@@ -115,6 +119,16 @@ async function checkEndpoint(ep: EndpointInput): Promise<HealthCheckResult> {
       status: "down",
       response_time_ms: 0,
       error: "URL must start with http:// or https://",
+    };
+  }
+
+  if (isSsrfUrl(ep.url)) {
+    return {
+      endpoint: ep.url,
+      name,
+      status: "down",
+      response_time_ms: 0,
+      error: "Blocked: internal/private address not accessible from Cloud Run",
     };
   }
 

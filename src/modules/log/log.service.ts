@@ -3,6 +3,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { LogStreamer } from "./log.streamer.js";
 import { validateCommand } from "../executor/whitelist.js";
+import { isSsrfUrl } from "../validation/url.validator.js";
 
 const execAsync = promisify(exec);
 const streamer = new LogStreamer();
@@ -84,6 +85,9 @@ export class LogService {
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       throw new Error("log_url must start with http:// or https://");
     }
+    if (isSsrfUrl(url)) {
+      throw new Error("log_url points to a blocked internal address.");
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);
@@ -134,10 +138,11 @@ export class LogService {
 
   private async mergeFiles(paths: string[]): Promise<string[]> {
     const limited = paths.slice(0, 10);
+    const perFileCap = Math.floor(50_000 / limited.length);
     const results = await Promise.all(
       limited.map(async (filePath) => {
         const label = path.basename(filePath);
-        const lines = await streamer.streamFile(filePath);
+        const lines = await streamer.streamFile(filePath, perFileCap);
         return lines
           .filter((l) => l.trim().length > 0)
           .map((line) => ({ label, line, ts: parseTimestamp(line) }));

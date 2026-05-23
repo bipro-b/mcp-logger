@@ -28,6 +28,7 @@ const fs = __importStar(require("fs"));
 const zlib = __importStar(require("zlib"));
 const readline = __importStar(require("readline"));
 const ERROR_KEYWORDS = /error|fatal|panic|exception|fail|timeout|refused|oom|killed|crash|evict/i;
+const STACK_CONTINUATION = /^(\t|\s{4,}|Caused by:|\.\.\..*\d+ more)/;
 class LogStreamer {
     async streamFile(filePath, maxLines = 10_000) {
         return new Promise((resolve, reject) => {
@@ -57,6 +58,18 @@ class LogStreamer {
             rl.on("close", () => resolve(lines));
             rl.on("error", (err) => reject(err));
         });
+    }
+    foldStackTraces(lines) {
+        const result = [];
+        for (const line of lines) {
+            if (result.length > 0 && STACK_CONTINUATION.test(line)) {
+                result[result.length - 1] += "\n" + line;
+            }
+            else {
+                result.push(line);
+            }
+        }
+        return result;
     }
     smartSample(lines, targetSize = 2_000) {
         if (lines.length <= targetSize)

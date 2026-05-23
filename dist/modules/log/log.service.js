@@ -29,6 +29,7 @@ const child_process_1 = require("child_process");
 const util_1 = require("util");
 const log_streamer_js_1 = require("./log.streamer.js");
 const whitelist_js_1 = require("../executor/whitelist.js");
+const url_validator_js_1 = require("../validation/url.validator.js");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 const streamer = new log_streamer_js_1.LogStreamer();
 const MAX_REMOTE_BYTES = 5 * 1024 * 1024;
@@ -89,6 +90,9 @@ class LogService {
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             throw new Error("log_url must start with http:// or https://");
         }
+        if ((0, url_validator_js_1.isSsrfUrl)(url)) {
+            throw new Error("log_url points to a blocked internal address.");
+        }
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30_000);
         try {
@@ -128,9 +132,10 @@ class LogService {
     }
     async mergeFiles(paths) {
         const limited = paths.slice(0, 10);
+        const perFileCap = Math.floor(50_000 / limited.length);
         const results = await Promise.all(limited.map(async (filePath) => {
             const label = path.basename(filePath);
-            const lines = await streamer.streamFile(filePath);
+            const lines = await streamer.streamFile(filePath, perFileCap);
             return lines
                 .filter((l) => l.trim().length > 0)
                 .map((line) => ({ label, line, ts: parseTimestamp(line) }));

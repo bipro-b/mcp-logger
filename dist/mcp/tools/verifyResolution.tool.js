@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleVerifyResolution = exports.verifyResolutionToolDef = void 0;
 const verifier_service_js_1 = require("../../modules/verifier/verifier.service.js");
+const audit_service_js_1 = require("../../modules/audit/audit.service.js");
 const verifier = new verifier_service_js_1.VerifierService();
 exports.verifyResolutionToolDef = {
     name: "verify_resolution",
@@ -43,6 +44,7 @@ async function handleVerifyResolution(rawArgs) {
         log_path: args.log_path,
         log_text: args.log_text,
     });
+    (0, audit_service_js_1.auditLog)({ tool: "verify_resolution", resolved: result.resolved, success: true });
     const statusIcon = result.resolved ? "✅" : "⚠️";
     const confidenceBar = {
         high: "████████ HIGH",

@@ -2,9 +2,11 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import * as http from "http";
+import { randomUUID } from "crypto";
 
 import { RateLimiter } from "../modules/ratelimit/ratelimit.service.js";
 import { metrics } from "../modules/metrics/metrics.service.js";
+import { requestContext } from "../modules/audit/request-context.js";
 import { analyzeLogsToolDef, handleAnalyzeLogs } from "./tools/analyzeLogs.tool.js";
 import { executeFixToolDef, handleExecuteFix } from "./tools/executeFix.tool.js";
 import { verifyResolutionToolDef, handleVerifyResolution } from "./tools/verifyResolution.tool.js";
@@ -86,6 +88,7 @@ export function createMCPServer(): Server {
     const start = Date.now();
     let isError = false;
 
+    return requestContext.run({ requestId: randomUUID() }, async () => {
     try {
       const args = request.params.arguments;
       let result;
@@ -119,6 +122,7 @@ export function createMCPServer(): Server {
     } finally {
       metrics.record(toolName, Date.now() - start, isError);
     }
+    }); // requestContext.run
   });
 
   return server;

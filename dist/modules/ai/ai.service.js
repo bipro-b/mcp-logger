@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIService = void 0;
 const metrics_service_js_1 = require("../metrics/metrics.service.js");
 const MODEL = "gemini-2.5-flash";
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 class AIService {
     get endpoint() {
@@ -51,7 +51,7 @@ class AIService {
     }
     async callGemini(prompt) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 50_000);
+        const timeout = setTimeout(() => controller.abort(), 25_000);
         try {
             const response = await fetch(this.endpoint, {
                 method: "POST",

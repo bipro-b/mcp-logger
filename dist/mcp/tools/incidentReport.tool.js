@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleIncidentReport = exports.incidentReportToolDef = void 0;
 const reporter_service_js_1 = require("../../modules/reporter/reporter.service.js");
+const audit_service_js_1 = require("../../modules/audit/audit.service.js");
 const reporter = new reporter_service_js_1.ReporterService();
 exports.incidentReportToolDef = {
     name: "incident_report",
@@ -60,6 +61,7 @@ async function handleIncidentReport(rawArgs) {
         log_source: args.log_source,
         started_at: args.started_at,
     });
+    (0, audit_service_js_1.auditLog)({ tool: "incident_report", incident_id, resolved: verification.resolved, success: true });
     return { content: [{ type: "text", text: report }] };
 }
 exports.handleIncidentReport = handleIncidentReport;

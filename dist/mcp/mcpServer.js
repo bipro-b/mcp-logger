@@ -28,8 +28,10 @@ const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
 const streamableHttp_js_1 = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const http = __importStar(require("http"));
+const crypto_1 = require("crypto");
 const ratelimit_service_js_1 = require("../modules/ratelimit/ratelimit.service.js");
 const metrics_service_js_1 = require("../modules/metrics/metrics.service.js");
+const request_context_js_1 = require("../modules/audit/request-context.js");
 const analyzeLogs_tool_js_1 = require("./tools/analyzeLogs.tool.js");
 const executeFix_tool_js_1 = require("./tools/executeFix.tool.js");
 const verifyResolution_tool_js_1 = require("./tools/verifyResolution.tool.js");
@@ -95,52 +97,54 @@ function createMCPServer() {
         const toolName = request.params.name;
         const start = Date.now();
         let isError = false;
-        try {
-            const args = request.params.arguments;
-            let result;
-            switch (toolName) {
-                case "analyze_logs":
-                    result = await (0, analyzeLogs_tool_js_1.handleAnalyzeLogs)(args);
-                    break;
-                case "execute_fix":
-                    result = await (0, executeFix_tool_js_1.handleExecuteFix)(args);
-                    break;
-                case "verify_resolution":
-                    result = await (0, verifyResolution_tool_js_1.handleVerifyResolution)(args);
-                    break;
-                case "incident_report":
-                    result = await (0, incidentReport_tool_js_1.handleIncidentReport)(args);
-                    break;
-                case "health_check":
-                    result = await (0, healthCheck_tool_js_1.handleHealthCheck)(args);
-                    break;
-                case "log_compare":
-                    result = await (0, logCompare_tool_js_1.handleLogCompare)(args);
-                    break;
-                default:
+        return request_context_js_1.requestContext.run({ requestId: (0, crypto_1.randomUUID)() }, async () => {
+            try {
+                const args = request.params.arguments;
+                let result;
+                switch (toolName) {
+                    case "analyze_logs":
+                        result = await (0, analyzeLogs_tool_js_1.handleAnalyzeLogs)(args);
+                        break;
+                    case "execute_fix":
+                        result = await (0, executeFix_tool_js_1.handleExecuteFix)(args);
+                        break;
+                    case "verify_resolution":
+                        result = await (0, verifyResolution_tool_js_1.handleVerifyResolution)(args);
+                        break;
+                    case "incident_report":
+                        result = await (0, incidentReport_tool_js_1.handleIncidentReport)(args);
+                        break;
+                    case "health_check":
+                        result = await (0, healthCheck_tool_js_1.handleHealthCheck)(args);
+                        break;
+                    case "log_compare":
+                        result = await (0, logCompare_tool_js_1.handleLogCompare)(args);
+                        break;
+                    default:
+                        isError = true;
+                        result = {
+                            content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
+                            isError: true,
+                        };
+                }
+                if (result.isError)
                     isError = true;
-                    result = {
-                        content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-                        isError: true,
-                    };
+                return result;
             }
-            if (result.isError)
+            catch (err) {
                 isError = true;
-            return result;
-        }
-        catch (err) {
-            isError = true;
-            return {
-                content: [{
-                        type: "text",
-                        text: `❌ ${err instanceof Error ? err.message : String(err)}`,
-                    }],
-                isError: true,
-            };
-        }
-        finally {
-            metrics_service_js_1.metrics.record(toolName, Date.now() - start, isError);
-        }
+                return {
+                    content: [{
+                            type: "text",
+                            text: `❌ ${err instanceof Error ? err.message : String(err)}`,
+                        }],
+                    isError: true,
+                };
+            }
+            finally {
+                metrics_service_js_1.metrics.record(toolName, Date.now() - start, isError);
+            }
+        }); // requestContext.run
     });
     return server;
 }

@@ -1,4 +1,5 @@
 import { VerifierService } from "../../modules/verifier/verifier.service.js";
+import { auditLog } from "../../modules/audit/audit.service.js";
 
 const verifier = new VerifierService();
 
@@ -55,6 +56,8 @@ export async function handleVerifyResolution(
     log_path: args.log_path,
     log_text: args.log_text,
   });
+
+  auditLog({ tool: "verify_resolution", resolved: result.resolved, success: true });
 
   const statusIcon = result.resolved ? "✅" : "⚠️";
   const confidenceBar = {

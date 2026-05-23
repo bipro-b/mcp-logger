@@ -6,6 +6,7 @@ import { SanitizerService } from "../../modules/sanitizer/sanitizer.service.js";
 import { AnalyzerService } from "../../modules/analyzer/analyzer.service.js";
 import { AIService } from "../../modules/ai/ai.service.js";
 import { validateLogInput } from "../../modules/validation/input.validator.js";
+import { auditLog } from "../../modules/audit/audit.service.js";
 
 const logService = new LogService();
 const logStreamer = new LogStreamer();
@@ -92,8 +93,9 @@ export async function handleAnalyzeLogs(
     return { content: [{ type: "text", text: "⚠️ No logs found or empty input." }] };
   }
 
-  // Pipeline: smart sample → parse JSON lines → redact secrets → analyze
-  const sampled = logStreamer.smartSample(rawLogs, 2_000);
+  // Pipeline: fold stack traces → smart sample → parse JSON lines → redact secrets → analyze
+  const folded = logStreamer.foldStackTraces(rawLogs);
+  const sampled = logStreamer.smartSample(folded, 2_000);
   const formatted = formatLogLines(sampled);
   const sanitizedLogs = sanitizer.sanitizeLogs(formatted);
 
@@ -111,7 +113,7 @@ export async function handleAnalyzeLogs(
   const aiResult = await Promise.race([
     aiService.analyzeLogs(importantLines, detectedIssue, sources),
     new Promise<string>((resolve) =>
-      setTimeout(() => resolve("⚠️ AI response timed out after 30s"), 30_000)
+      setTimeout(() => resolve("⚠️ AI response timed out after 55s"), 55_000)
     ),
   ]);
 
@@ -122,6 +124,8 @@ export async function handleAnalyzeLogs(
   else if (args.log_path) sourceLabel = path.basename(args.log_path);
   else if (args.log_url) sourceLabel = `remote URL`;
   else if (args.kubectl_log) sourceLabel = `kubectl: ${args.kubectl_log.pod} (${args.kubectl_log.namespace})`;
+
+  auditLog({ tool: "analyze_logs", source: sourceLabel, lines_ingested: rawLogs.length, success: true });
 
   return {
     content: [

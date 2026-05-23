@@ -32,6 +32,7 @@ const sanitizer_service_js_1 = require("../../modules/sanitizer/sanitizer.servic
 const analyzer_service_js_1 = require("../../modules/analyzer/analyzer.service.js");
 const ai_service_js_1 = require("../../modules/ai/ai.service.js");
 const input_validator_js_1 = require("../../modules/validation/input.validator.js");
+const audit_service_js_1 = require("../../modules/audit/audit.service.js");
 const logService = new log_service_js_1.LogService();
 const logStreamer = new log_streamer_js_1.LogStreamer();
 const sanitizer = new sanitizer_service_js_1.SanitizerService();
@@ -98,8 +99,9 @@ async function handleAnalyzeLogs(rawArgs) {
     if (!rawLogs || rawLogs.length === 0) {
         return { content: [{ type: "text", text: "⚠️ No logs found or empty input." }] };
     }
-    // Pipeline: smart sample → parse JSON lines → redact secrets → analyze
-    const sampled = logStreamer.smartSample(rawLogs, 2_000);
+    // Pipeline: fold stack traces → smart sample → parse JSON lines → redact secrets → analyze
+    const folded = logStreamer.foldStackTraces(rawLogs);
+    const sampled = logStreamer.smartSample(folded, 2_000);
     const formatted = (0, log_formatter_js_1.formatLogLines)(sampled);
     const sanitizedLogs = sanitizer.sanitizeLogs(formatted);
     let importantLines = [];
@@ -114,7 +116,7 @@ async function handleAnalyzeLogs(rawArgs) {
     const sources = args.log_paths?.map((p) => path.basename(p));
     const aiResult = await Promise.race([
         aiService.analyzeLogs(importantLines, detectedIssue, sources),
-        new Promise((resolve) => setTimeout(() => resolve("⚠️ AI response timed out after 30s"), 30_000)),
+        new Promise((resolve) => setTimeout(() => resolve("⚠️ AI response timed out after 55s"), 55_000)),
     ]);
     const preview = importantLines.slice(-10).join("\n");
     let sourceLabel = "direct input";
@@ -126,6 +128,7 @@ async function handleAnalyzeLogs(rawArgs) {
         sourceLabel = `remote URL`;
     else if (args.kubectl_log)
         sourceLabel = `kubectl: ${args.kubectl_log.pod} (${args.kubectl_log.namespace})`;
+    (0, audit_service_js_1.auditLog)({ tool: "analyze_logs", source: sourceLabel, lines_ingested: rawLogs.length, success: true });
     return {
         content: [
             {
