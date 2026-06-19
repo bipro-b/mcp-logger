@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateCommand = exports.WHITELIST = void 0;
+exports.validateCommand = exports.normalizeCommand = exports.WHITELIST = void 0;
 const SHELL_OPERATORS = /[;&|`$(){}[\]<>\\]/;
 exports.WHITELIST = [
-    // ── Kubernetes (14 patterns) ─────────────────────────────────────────────
+    // ── Kubernetes (15 patterns) ─────────────────────────────────────────────
     { pattern: /^kubectl get pods( -n [\w-]+)?$/, category: "kubernetes", description: "List pods", risk: "low" },
     { pattern: /^kubectl get pods -n [\w-]+ -o wide$/, category: "kubernetes", description: "List pods with node info", risk: "low" },
     { pattern: /^kubectl get deployments?( -n [\w-]+)?$/, category: "kubernetes", description: "List deployments", risk: "low" },
@@ -20,6 +20,7 @@ exports.WHITELIST = [
     { pattern: /^kubectl rollout restart deployment\/[\w-]+( -n [\w-]+)?$/, category: "kubernetes", description: "Restart a deployment", risk: "medium" },
     { pattern: /^kubectl rollout status deployment\/[\w-]+( -n [\w-]+)?$/, category: "kubernetes", description: "Check rollout status", risk: "low" },
     { pattern: /^kubectl rollout undo deployment\/[\w-]+( -n [\w-]+)?$/, category: "kubernetes", description: "Roll back a deployment", risk: "high" },
+    { pattern: /^kubectl scale deployment\/[\w-]+ --replicas=\d+( -n [\w-]+)?$/, category: "kubernetes", description: "Scale a deployment", risk: "medium" },
     { pattern: /^kubectl delete pod [\w.-]+ -n [\w-]+$/, category: "kubernetes", description: "Force-delete a pod (triggers restart)", risk: "high" },
     // ── Docker (8 patterns) ──────────────────────────────────────────────────
     { pattern: /^docker ps( -a)?$/, category: "docker", description: "List containers", risk: "low" },
@@ -63,16 +64,29 @@ exports.WHITELIST = [
     { pattern: /^(netstat|ss) -tulpn$/, category: "network", description: "List listening ports", risk: "low" },
     { pattern: /^curl -s http:\/\/localhost:\d+\/(health|ping|status|ready|metrics)$/, category: "network", description: "Check local service health endpoint", risk: "low" },
 ];
+// Normalizes AI-generated command variants to whitelist-compatible format.
+// AI models output kubectl commands in inconsistent formats (e.g. "deployment name"
+// instead of "deployment/name"). Normalization runs before whitelist check AND before
+// execution so the corrected form is what actually runs.
+function normalizeCommand(cmd) {
+    // kubectl rollout VERB deployment NAME [-n NS] → deployment/NAME
+    let out = cmd.replace(/^(kubectl rollout (?:restart|undo|status)) deployment ([^\s/]+)(.*)/, "$1 deployment/$2$3");
+    // kubectl scale deployment NAME → deployment/NAME
+    out = out.replace(/^(kubectl scale) deployment ([^\s/]+)(.*)/, "$1 deployment/$2$3");
+    // kubectl delete pod NAME -n NS (already correct, but trim extra whitespace)
+    return out.replace(/\s+/g, " ").trim();
+}
+exports.normalizeCommand = normalizeCommand;
 function validateCommand(cmd) {
     if (SHELL_OPERATORS.test(cmd)) {
         return { allowed: false, reason: "Command contains forbidden shell operators" };
     }
-    const trimmed = cmd.trim();
+    const normalized = normalizeCommand(cmd.trim());
     for (const entry of exports.WHITELIST) {
-        if (entry.pattern.test(trimmed)) {
-            return { allowed: true, entry };
+        if (entry.pattern.test(normalized)) {
+            return { allowed: true, entry, normalized };
         }
     }
-    return { allowed: false, reason: `Command not in whitelist: "${trimmed}"` };
+    return { allowed: false, reason: `Command not in whitelist: "${cmd.trim()}"` };
 }
 exports.validateCommand = validateCommand;

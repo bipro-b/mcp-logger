@@ -77,6 +77,8 @@ export async function handleVerifyResolution(
     ``,
     result.message,
     remaining,
+    ``,
+    `ℹ️  This check is heuristic-based (keyword matching). For high-stakes incidents, confirm manually by checking metrics or re-running analyze_logs on a fresh log snapshot.`,
   ].join("\n");
 
   return { content: [{ type: "text", text }] };

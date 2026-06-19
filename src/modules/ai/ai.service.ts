@@ -118,7 +118,8 @@ IMPACT:
 <Which services or users were affected and how>
 
 FIX_COMMANDS:
-<One command per line — exact commands only, no numbering or inline comments>
+<One command per line — exact commands only, no numbering, no inline comments>
+<Use these exact formats: kubectl rollout restart deployment/NAME -n NS | kubectl rollout undo deployment/NAME -n NS | kubectl scale deployment/NAME --replicas=N -n NS | kubectl delete pod NAME -n NS | docker restart NAME | systemctl restart NAME | pm2 restart NAME>
 
 EXPLANATION:
 <2-3 sentences: failure chain from root cause to visible impact>

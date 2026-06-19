@@ -8,7 +8,7 @@ const executor = new ExecutorService();
 export const executeFixToolDef = {
   name: "execute_fix",
   description:
-    "Execute remediation commands with security whitelisting and approval workflow. All commands validated before execution. High-risk commands (kubectl delete, rollback, stop) require explicit approved: true. Use generate_script: true to get a portable bash script for remote clusters.",
+    "Execute remediation commands with security whitelisting and approval workflow. IMPORTANT: When running on the hosted Cloud Run service, this tool cannot reach your infrastructure (no kubectl/docker/systemctl access). It will automatically generate a portable bash script instead. For self-hosted deployments with local infrastructure access, commands execute directly. High-risk commands require approved: true. Use generate_script: true to always get a portable script.",
   inputSchema: {
     type: "object",
     required: ["commands"],
@@ -66,6 +66,26 @@ export async function handleExecuteFix(
   }
 
   const dry_run = args.dry_run !== false;
+
+  // On Cloud Run (K_SERVICE is set), the server has no access to customer infrastructure.
+  // Auto-switch to generate_script when the user tries to actually execute commands.
+  if (!dry_run && process.env.K_SERVICE) {
+    const scriptResult = generateBashScript(args.commands);
+    if (scriptResult.isError) return scriptResult;
+    return {
+      content: [{
+        type: "text",
+        text: [
+          `⚠️ Running on hosted Cloud Run — this server cannot access your kubectl/docker/systemctl.`,
+          ``,
+          `A portable bash script has been generated instead. Run it on any machine`,
+          `that has the required tools installed and access to your infrastructure:`,
+          ``,
+          scriptResult.content[0].text,
+        ].join("\n"),
+      }],
+    };
+  }
 
   // Approval gate for high-risk commands
   if (!dry_run) {

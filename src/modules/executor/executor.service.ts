@@ -14,6 +14,7 @@ export class ExecutorService {
 
     for (const cmd of commands) {
       const validation = validateCommand(cmd);
+      const execCmd = validation.normalized ?? cmd; // use normalized form for execution
 
       if (!validation.allowed) {
         results.push({
@@ -28,11 +29,13 @@ export class ExecutorService {
       }
 
       if (dry_run) {
+        const normalizeNote =
+          execCmd !== cmd ? `\nNormalized to: ${execCmd}` : "";
         results.push({
           command: cmd,
           success: true,
           output: [
-            `[DRY RUN] Would execute: ${cmd}`,
+            `[DRY RUN] Would execute: ${execCmd}${normalizeNote}`,
             `Category: ${validation.entry?.category}`,
             `Risk: ${validation.entry?.risk}`,
             `Description: ${validation.entry?.description}`,
@@ -49,7 +52,7 @@ export class ExecutorService {
       const start = Date.now();
       try {
         const { stdout, stderr } = await Promise.race([
-          execAsync(cmd),
+          execAsync(execCmd),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Command timed out after 30s")), EXEC_TIMEOUT_MS)
           ),
@@ -60,7 +63,7 @@ export class ExecutorService {
         const sanitizedOutput = sanitizer.sanitizeLogs(rawOutput.split("\n")).join("\n");
 
         results.push({
-          command: cmd,
+          command: execCmd,
           success: true,
           output: sanitizedOutput,
           duration_ms: Date.now() - start,
@@ -71,7 +74,7 @@ export class ExecutorService {
         });
       } catch (err) {
         results.push({
-          command: cmd,
+          command: execCmd,
           success: false,
           output: "",
           error: err instanceof Error ? err.message : String(err),

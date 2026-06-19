@@ -13,6 +13,7 @@ class ExecutorService {
         const results = [];
         for (const cmd of commands) {
             const validation = (0, whitelist_js_1.validateCommand)(cmd);
+            const execCmd = validation.normalized ?? cmd; // use normalized form for execution
             if (!validation.allowed) {
                 results.push({
                     command: cmd,
@@ -25,11 +26,12 @@ class ExecutorService {
                 break;
             }
             if (dry_run) {
+                const normalizeNote = execCmd !== cmd ? `\nNormalized to: ${execCmd}` : "";
                 results.push({
                     command: cmd,
                     success: true,
                     output: [
-                        `[DRY RUN] Would execute: ${cmd}`,
+                        `[DRY RUN] Would execute: ${execCmd}${normalizeNote}`,
                         `Category: ${validation.entry?.category}`,
                         `Risk: ${validation.entry?.risk}`,
                         `Description: ${validation.entry?.description}`,
@@ -45,14 +47,14 @@ class ExecutorService {
             const start = Date.now();
             try {
                 const { stdout, stderr } = await Promise.race([
-                    execAsync(cmd),
+                    execAsync(execCmd),
                     new Promise((_, reject) => setTimeout(() => reject(new Error("Command timed out after 30s")), EXEC_TIMEOUT_MS)),
                 ]);
                 // Sanitize output — command output can contain IPs, credentials, env vars
                 const rawOutput = (stdout || stderr || "(no output)").trim();
                 const sanitizedOutput = sanitizer.sanitizeLogs(rawOutput.split("\n")).join("\n");
                 results.push({
-                    command: cmd,
+                    command: execCmd,
                     success: true,
                     output: sanitizedOutput,
                     duration_ms: Date.now() - start,
@@ -64,7 +66,7 @@ class ExecutorService {
             }
             catch (err) {
                 results.push({
-                    command: cmd,
+                    command: execCmd,
                     success: false,
                     output: "",
                     error: err instanceof Error ? err.message : String(err),
